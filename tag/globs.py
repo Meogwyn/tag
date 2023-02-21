@@ -5,5 +5,7 @@ Globs = {
         "logfile":None, 
         "logfile_mode":None, 
         "logstderr":None,
+        "tag_prot_vers":"V1.0",
+        "tag_vers":"V1.0",
         "env":None #dict of env vars
 }
