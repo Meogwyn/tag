@@ -1,0 +1,21 @@
+[
+    {
+        "name": "test",
+        "id": 60944095842,
+        "queries": [
+            {
+                "prompt": "I like bananas, do you?",
+                "inp_cb_gen": false,
+                "inp_cb_map": false,
+                "out_cb": false,
+                "oai_config": {
+                    "engine": "text-davinci-3",
+                    "max_tokens": 1024,
+                    "temperature": 0.5,
+                    "frequency_penalty": 1,
+                    "presence_penalty": 1
+                }
+            }
+        ]
+    }
+]

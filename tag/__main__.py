@@ -1,4 +1,6 @@
-# Initialization and general control (message parsing)
+"""
+initialization (code execution begins with main() function)
+"""
 
 import asyncio
 import signal
@@ -12,10 +14,8 @@ import dotenv
 from tag import util
 from tag import globs
 
-from tag.tag_prot import parse_task
-from tag.ipc_serv import ipc_serv_task
-
-myenv = {}
+from tag import tag_prot
+from tag import ipc_serv
 
 util.taglog_add_file_sects(__file__, ["MAIN"])
 
@@ -33,10 +33,7 @@ async def main():
 
     util.taglog(f"env vars:{globs.Globs['env']}", sects = util.logsects[__file__], depth = 5000)
 
-    await asyncio.gather(ipc_serv_task(), parse_task())
-    while True:
-        util.taglog('lol', sects = util.logsects[__file__])
-        await asyncio.sleep(1)
+    await asyncio.gather(ipc_serv.ipc_serv_task(), tag_prot.parse_task())
 
 """
 NO LOGGING AT ALL IN THIS FUNC
