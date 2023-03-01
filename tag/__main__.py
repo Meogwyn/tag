@@ -13,6 +13,7 @@ import dotenv
 #from tag.util import util.taglog
 from tag import util
 from tag import globs
+from tag import oai_stuff
 
 from tag import tag_prot
 from tag import ipc_serv
@@ -33,7 +34,7 @@ async def main():
 
     util.taglog(f"env vars:{globs.Globs['env']}", sects = util.logsects[__file__], depth = 5000)
 
-    await asyncio.gather(ipc_serv.ipc_serv_task(), tag_prot.parse_task())
+    await asyncio.gather(ipc_serv.ipc_serv_task(), tag_prot.parse_task(), oai_stuff.oai_task())
 
 """
 NO LOGGING AT ALL IN THIS FUNC

@@ -5,15 +5,29 @@ by the author of this code, so don't look for any documentation for it online)
 
 import asyncio
 import traceback
+from tag import schemas
 from tag import util
 from tag import ipc_serv
 from tag import globs
 from tag import pers
+from tag import oai_stuff
 import json
 
 parseq = asyncio.Queue()
 
+
 util.taglog_add_file_sects(__file__, ["PARSER"])
+def idea_success(idea):
+    ipc_serv.ipc_send_dict({"type":"idea_success", "data":idea})
+def idea_failure(idea, error_desc):
+    ipc_serv.ipc_send_dict({"type":"idea_failure", "err":{"idea": idea, "desc": error_desc}})
+
+def pkg_success(pkg_id):
+    ipc_serv.ipc_send_dict({"type":"pkg_success", "data":pkg_id})
+def pkg_failure(pkg_id, error_desc):
+    ipc_serv.ipc_send_dict({"type":"pkg_failure", "err":{"pkg_id": pkg_id, "desc": error_desc}})
+
+
 
 def push_parseq_str(cmdstr):
     locsects = util.logsects[__file__]
@@ -39,7 +53,7 @@ def resp_cmd_succ(ctype, data):
         ldata = data
     ipc_serv.ipc_send_dict({"type":ctype, "data":ldata})
 def resp_cmd_err(ctype, err):
-    ipc_serv.ipc_send_dict({"type":ctype, "err":err})
+    ipc_serv.ipc_send_dict({"type":ctype, "err":{"desc": err}})
 
 """
 Verifies all args from req_args are in args
@@ -91,10 +105,30 @@ async def exec_cmd(cmd):
             pass
         case "cancel":
             pass
-        case "start_fl":
-            pass
-        case "start_lst":
-            pass
+        case "set_key":
+            try:
+                req_args = ["key"]
+                val_args(cmd["data"], req_args)
+                oai_stuff.set_key(cmd["data"]["key"])
+                resp_cmd_succ(cmd["type"], None) 
+            except Exception as e:
+                resp_cmd_err(cmd["type"], repr(e)) 
+        case "start":
+            try:
+                req_args = ["id"]
+
+                val_args(cmd["data"], req_args)
+
+                pkg = pers.get_pkg_config(cmd["data"]["id"])
+                oai_stuff.schedule_pkg(pkg)
+
+                resp_cmd_succ(cmd["type"], None) #ret is created config entry
+
+            except Exception as e:
+                resp_cmd_err(cmd["type"], repr(e) + traceback.format_exc()) 
+#                resp_cmd_err(cmd["type"], repr(e)) 
+                return
+
         case "status":
             pass
         case "export_run":
@@ -116,8 +150,10 @@ async def exec_cmd(cmd):
         case "create_pkg_config":
             ret = None
             try: 
-                req_args = ["name"]
-                opt_args = ["queries"] 
+                req_args = ["pkgc"] # shell pkgc without id, etc
+                opt_args = ["ideas_files"]
+
+
                 """
                 if 'params' are missing, a default profile is created
                 if 'params' is present, but lacks some possible parameters, defualt
@@ -126,16 +162,16 @@ async def exec_cmd(cmd):
 
                 val_args(cmd["data"], req_args, opt_args)
 
-                if "queries" in cmd["data"]:
-                    ret = pers.create_pkg_config(cmd["data"]["name"], 
-                                                 cmd["data"]["queries"]) 
+                if "ideas_files" in cmd["data"]:
+                    ret = pers.create_pkg_config(cmd["data"]["pkgc"], cmd["data"]["ideas_files"])
                 else:
-                    ret = pers.create_pkg_config(cmd["data"]["name"], None) 
+                    ret = pers.create_pkg_config(cmd["data"]["pkgc"])
 
+                resp_cmd_succ(cmd["type"], ret) #ret is created config entry
             except Exception as e:
                 resp_cmd_err(cmd["type"], repr(e) + traceback.format_exc()) 
+#                resp_cmd_err(cmd["type"], repr(e)) 
                 return
-            resp_cmd_succ(cmd["type"], ret) #ret is created config entry
         case "remove_pkg_config":
             try:
                 req_args = ["id"]
@@ -143,6 +179,18 @@ async def exec_cmd(cmd):
                 val_args(cmd["data"], req_args)
 
                 ret = pers.remove_pkg_config(cmd["data"]["id"])
+            except Exception as e:
+                    resp_cmd_err(cmd["type"], repr(e))
+                    return
+            resp_cmd_succ(cmd["type"], ret) # ret is resultant pkg config file
+        case "update_pkg_config":
+            try:
+                req_args = ["id"]
+                opt_args = ["queries"] 
+
+                val_args(cmd["data"], req_args, opt_args)
+
+                ret = pers.update_pkg_config(cmd["data"]["id"], cmd["data"]["queries"])
             except Exception as e:
                     resp_cmd_err(cmd["type"], repr(e))
                     return

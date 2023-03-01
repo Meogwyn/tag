@@ -1,3 +1,5 @@
 tag/__pycache__
 tmp/*
-pers/*
+pers/pkg_runs/*
+pers/pkg_configs/*
+

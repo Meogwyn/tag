@@ -4,11 +4,38 @@ settings and job runs information
 """
 from tag import globs
 from tag import util
+from tag import schemas
+import os
+import jsonschema
 import random
 import json
-import os.path as path
 
-util.taglog_add_file_sects(__file__, ["IPC_SERV"])
+util.taglog_add_file_sects(__file__, ["PERS"])
+
+"""
+Write the contents of an idea_stat to the file
+"""
+def dump_pkg_hdl_state(pkg_hdl_state):
+    locsects = list(util.logsects[__file__])
+    util.taglog(f"dumping package state {pkg_hdl_state.to_json()}", 5000, locsects)
+    if pkg_hdl_state.pkg:
+        with open(f"pers/pkg_runs/{pkg_hdl_state.run_id}", "w") as fl:
+            fl.write(pkg_hdl_state.to_json())
+def write_idea_stat(queries, query_data, outfl):
+    if len(queries) != len(query_data):
+        raise Exception(f"size of query_data ({len(query_data)}) differs from size of queries ({len(queries)})!")
+    with open(outfl, "x") as fl:
+        for i in range(len(queries)):
+            fl.write(f"{i} -- {queries[i]['out_header']}\n\n")
+            fl.write(f"{query_data[i]}\n\n")
+
+
+
+"""
+Validate that a pkg config conforms to the prototype format
+"""
+def val_pkg_config(pkgc):
+    jsonschema.validators.validate(pkgc, schemas.pkg_config_schema)
 
 def gen_settings():
     temp = {"test_setting":"test"}
@@ -16,7 +43,7 @@ def gen_settings():
         json.dump(temp, fl, indent = 4)
 def all_settings_profiles():
     locsects = list(util.logsects[__file__])
-    if not path.exists("pers/settings.json"):
+    if not os.path.exists("pers/settings.json"):
         util.taglog(f"settings file missing! generating new one", 1000, locsects)
         gen_settings()
     with open("pers/settings.json", "r+") as fl:
@@ -36,22 +63,19 @@ def gen_pkg_configs():
     with open("pers/pkg_configs.json", "w+") as fl:
         json.dump(temp, fl, indent = 4)
 """
-Returns all pkg configs currently defined
+Returns list with all pkg configs, which, by the way, must be .json files
 """
 def all_pkg_configs():
     locsects = list(util.logsects[__file__])
-    if not path.exists("pers/pkg_configs.json"):
-        util.taglog(f"pkg config file missing! generating new one", 1000, 
-                    locsects)
-        gen_pkg_configs()
-    with open("pers/pkg_configs.json", "r+") as fl:
-        raw = fl.read()
-        if len(raw) == 0:
-            util.taglog(f"pkg config file empty! generating new one", 1000, 
-                        locsects)
-            gen_pkg_configs()
-            return json.load(fl)
-        return json.loads(raw)
+
+    out = []
+
+    pkgc_fl_list = os.listdir('pers/pkg_configs')
+    for fname in pkgc_fl_list:
+        with open('pers/pkg_configs/' + fname, "r") as fl:
+            out.append(json.load(fl))
+    return out
+    
 """
 generates default pkg config with specified name.
 Necessarily initializes ALL possible params
@@ -94,55 +118,49 @@ pushed into a container class that has all of 'em.
     ...
 ]
 
-"""
-def empty_pkg_config(name):
-    pkgc = {
-        "name": name,
-        "id": None,
-        "queries": [
-            {
-                "prompt": None ,
-                "inp_cb_gen": None,
-                "inp_cb_map": None,
-                "out_cb": None,
+example 'queries':
+"queries": [
+    {
+        "prompt": "provide a random number between 1 and 4 * 10 ^ 13" ,
+        "inp_cb_gen": None,
+        "inp_cb_map": None,
+        "out_cb": None,
 
-                # oai stuff
-                "oai_config": {
-                    "engine": "text-davinci-3",
-                    "max_tokens": 1024,
-                    "temperature": 0.5,
-                    "frequency_penalty": 1,
-                    "presence_penalty": 1
-                }
-            }
-        ]
+        # oai stuff
+        "oai_config": {
+            "engine": "text-davinci-3",
+            "max_tokens": 1024,
+            "temperature": 0.5,
+            "frequency_penalty": 1,
+            "presence_penalty": 1
+        }
+    },
+    {
+        "prompt": "name $0 banana types ,
+        "inp_cb_gen": None,
+        "inp_cb_map": None,
+        "out_cb": None,
+
+        # oai stuff
+        "oai_config": {
+            "engine": "text-davinci-3",
+            "max_tokens": 1024,
+            "temperature": 0.5,
+            "frequency_penalty": 1,
+            "presence_penalty": 1
+        }
     }
-    return pkgc
+]
+"""
 
 def write_pkg_config(config):
     locsects = list(util.logsects[__file__])
-    if not path.exists("pers/pkg_configs.json"):
-        util.taglog(f"pkg config file missing! generating new one", 1000, 
-                    locsects)
-        gen_pkg_configs()
-    with open("pers/pkg_configs.json", "r+") as fl:
-        raw = fl.read()
-        if len(raw) == 0:
-            util.taglog(f"pkg config file empty! generating new one", 1000, 
-                        locsects)
-            gen_pkg_configs()
-            
-        rawjson = json.loads(raw)
-
-        for temp in rawjson:
-            if config["name"] == temp["name"]:
-                raise Exception(f"pkg config with name {temp['name']} already exists")
-
-        rawjson.append(config)
-        fl.truncate()
-        fl.seek(0)
-        json.dump(rawjson, fl, indent = 4)
-        return rawjson
+    """
+    Shoddy but probably works
+    """
+    with open(f"pers/pkg_configs/{config['name']}-{config['id']}.json", "w") as fl:
+        json.dump(config, fl, indent = 4)
+    return config
 """
 Validates format of queries to be added to a pkg config
 
@@ -160,45 +178,96 @@ def val_queries(queries):
     
 
 """
-Creates package config with specified name and, optionally, particular specified 
-params (which are filled in with defaults where params are left unspecified)
-
-returns pkg config id
+Same as 'id', except file gets overwritten, rather than created
 """
-def create_pkg_config(name, queries = None):
+def update_pkg_config(pkg_config, pkg_id):
     locsects = list(util.logsects[__file__])
-    pkgc = empty_pkg_config(name)
-    ret = {"val":None, "err":None}
 
-    if queries:
-        val_queries(queries)
-        pkgc["queries"] = list(queries)
-    else: 
-        pkgc["queries"] = []
+    pkgc = dict(pkg_config)
+    
+    if "ideas_files":
+        load_ideas_files(pkgc, ideas_files)
 
-    pkgc["id"] = random.randint(pow(10, 10), pow(10, 11) - 1)
+    val_pkg_config(pkgc)
+
+    fl = lookup_pkg_config(pkg_id)
+    json.dump(pkg_config, fl, indent = 4)
+    return pkg_config
+"""
+Copies over ideas into the specified pkg config from a provided list of ideas
+files
+
+Note: no validation is performed on ideas files to make sure the strings are in
+appropriate form.
+"""
+def load_ideas_files(pkgc, ideas_files):
+    for fname in ideas_files:
+        if not os.path.exists(fname):
+            raise Exception(f"ideas file path {fname} doesn't exist")
+        with open(fname, "r") as fl:
+            while True:
+                idea = fl.readline()
+                if idea == "":
+                    break
+                idea.strip()
+                pkgc["ideas"].append(idea)
+"""
+Creates package config with args according to pkg_config_schema in schemas.py
+and an optional 'ideas_files' arg which complements 'manually' provided ideas with
+ones from the specified ideas files
+
+pkg_config is raw data provided according to pkg_config_schema, and simply copied
+over
+"""
+def create_pkg_config(pkg_config, ideas_files = None):
+    locsects = list(util.logsects[__file__])
+
+    pkgc = dict(pkg_config)
+    pkgc["id"] = random.randint(pow(10, 9), pow(10, 10) - 1)
+    
+    if ideas_files:
+        load_ideas_files(pkgc, ideas_files)
+
+    val_pkg_config(pkgc)
+    util.taglog(f"about to create following pkg config {pkgc}", 5000, locsects)
 
     return write_pkg_config(pkgc)
+
+"""
+Returns open file if found. Raises exception if not found.
+
+todo: working directory???
+"""
+def lookup_pkg_config(pkg_id):
+    pkgc_fl_list = os.listdir("pers/pkg_configs")
+    for fname in pkgc_fl_list:
+        fl = open("pers/pkg_configs/" + fname, "r")
+        jsonraw = json.load(fl)
+        if jsonraw["id"] == pkg_id:
+            return fl
+        fl.close()
+
+    raise Exception(f"pkg_config with id {pkg_id} not found")
+
+def get_pkg_config(pkg_id):
+    pkgc_fl_list = os.listdir("pers/pkg_configs")
+    for fname in pkgc_fl_list:
+        with open("pers/pkg_configs/" + fname, "r") as fl:
+            out = json.load(fl)
+            if out["id"] == pkg_id:
+                return out
+
+    raise Exception(f"pkg_config with id {pkg_id} not found")
+
+"""
+removes pkg config file with specified id
+"""
 def remove_pkg_config(pkg_id):
+    locsects = list(util.logsects[__file__])
     found = False
-    
-    if not path.exists("pers/pkg_configs.json"):
-        return
-    with open("pers/pkg_configs.json", "r+") as fl:
-        raw = fl.read()
-        if len(raw) == 0:
-            return
-        rawjson = json.loads(raw)
-        for conf in rawjson:
-            if conf["id"] == pkg_id:
-                temp = conf
-                rawjson.remove(conf)
-                found = True
-                break
 
-        if not found:
-            raise Exception(f"pkg config with id {pkg_id} not found")
+    util.taglog(f"attempting to remove pkg with id {pkg_id}", 3000, locsects)
 
-        fl.truncate()
-        json.dump(rawjson, fl)
-        return rawjson
+    target = lookup_pkg_config(pkg_id)
+    util.taglog(f"removing pkg config file {target.name}", 3000, locsects)
+    os.remove(target.name)
