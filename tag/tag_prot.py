@@ -26,6 +26,11 @@ def pkg_success(pkg_id):
     ipc_serv.ipc_send_dict({"type":"pkg_success", "data":pkg_id})
 def pkg_failure(pkg_id, error_desc):
     ipc_serv.ipc_send_dict({"type":"pkg_failure", "err":{"pkg_id": pkg_id, "desc": error_desc}})
+def pkg_start(pkg_hdl_state):
+    locsects = util.logsects[__file__]
+    data = json.loads(pkg_hdl_state.to_json()) # Hack
+    ipc_serv.ipc_send_dict({"type":"pkg_start", "data":data})
+    util.taglog(f"hack result: {data}", 5000, locsects)
 
 
 
@@ -145,8 +150,11 @@ async def exec_cmd(cmd):
             ret = pers.all_settings_profiles()
             resp_cmd_succ(cmd["type"], ret)
         case "all_pkg_configs":
-            ret = pers.all_pkg_configs()
-            resp_cmd_succ(cmd["type"], ret)
+            try:
+                ret = pers.all_pkg_configs()
+                resp_cmd_succ(cmd["type"], ret)
+            except Exception as e:
+                resp_cmd_err(cmd["type"], repr(e) + traceback.format_exc()) 
         case "create_pkg_config":
             ret = None
             try: 
@@ -191,10 +199,43 @@ async def exec_cmd(cmd):
                 val_args(cmd["data"], req_args, opt_args)
 
                 ret = pers.update_pkg_config(cmd["data"]["id"], cmd["data"]["queries"])
+                resp_cmd_succ(cmd["type"], ret) # ret is resultant pkg config file
             except Exception as e:
                     resp_cmd_err(cmd["type"], repr(e))
                     return
-            resp_cmd_succ(cmd["type"], ret) # ret is resultant pkg config file
+        case "duplicate_pkg_config":
+            try:
+                req_args = ["id"]
+                val_args(cmd["data"], req_args)
+                ret = pers.duplicate_pkg_config(cmd["data"]["id"], cmd["data"]["queries"])
+                resp_cmd_succ(cmd["type"], ret) # ret is resultant pkg config file
+            except Exception as e:
+                    resp_cmd_err(cmd["type"], repr(e))
+                    return
+        case "default_pkg_config":
+            ret = None
+            try: 
+                req_args = ["name"] 
+                opt_args = ["ideas", "ideas_files"]
+
+
+                val_args(cmd["data"], req_args, opt_args)
+
+                args = [cmd["data"]["name"]]
+
+                if "ideas" in cmd["data"]:
+                    args.append(cmd["data"]["ideas"])
+                if "ideas_files" in cmd["data"]:
+                    args.append(cmd["data"]["ideas_files"])
+
+                ret = pers.default_pkg_config(*args)
+
+                resp_cmd_succ(cmd["type"], ret) #ret is created config entry
+            except Exception as e:
+                resp_cmd_err(cmd["type"], repr(e) + traceback.format_exc()) 
+#                resp_cmd_err(cmd["type"], repr(e)) 
+                return
+
         case "create_settings_profile":
             pass
         case "edit_settings_profile":

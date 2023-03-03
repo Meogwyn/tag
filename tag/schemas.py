@@ -14,6 +14,7 @@ pkg_config_schema = {
         },
         "output_dir": {"type": "string"},
         "overwrite": {"type": "boolean"},
+        "max_failures": {"type": "integer"},
         "ideas": {
             "type":"array",
             "items": {
@@ -82,7 +83,6 @@ pkg_config_schema = {
                             "logit_bias": {"type": "object"},
                             "user": {"type": "string"},
                         },
-                        "required": ["model"]
                     }
                 },
                 "required": ["prompt", "out_header", "oai_config"]
@@ -94,7 +94,8 @@ pkg_config_schema = {
             "id",
             "ideas",
             "queries",
-            "output_dir"
+            "output_dir",
+            "max_failures"
     ]
 }
 

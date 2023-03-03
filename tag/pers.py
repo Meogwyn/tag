@@ -13,7 +13,7 @@ import json
 util.taglog_add_file_sects(__file__, ["PERS"])
 
 """
-Write the contents of an idea_stat to the file
+Write the contents of an idea_stat to the file. Overwrites. 
 """
 def dump_pkg_hdl_state(pkg_hdl_state):
     locsects = list(util.logsects[__file__])
@@ -72,7 +72,10 @@ def all_pkg_configs():
 
     pkgc_fl_list = os.listdir('pers/pkg_configs')
     for fname in pkgc_fl_list:
+        if not fname.lower().endswith('.json'):
+            continue
         with open('pers/pkg_configs/' + fname, "r") as fl:
+            util.taglog(f"trying to load file {fname}", 5000, locsects)
             out.append(json.load(fl))
     return out
     
@@ -224,6 +227,8 @@ def create_pkg_config(pkg_config, ideas_files = None):
 
     pkgc = dict(pkg_config)
     pkgc["id"] = random.randint(pow(10, 9), pow(10, 10) - 1)
+    if not pkgc["max_failures"]:
+        pkgc["max_failures"] = 50
     
     if ideas_files:
         load_ideas_files(pkgc, ideas_files)
@@ -232,6 +237,107 @@ def create_pkg_config(pkg_config, ideas_files = None):
     util.taglog(f"about to create following pkg config {pkgc}", 5000, locsects)
 
     return write_pkg_config(pkgc)
+def duplicate_pkg_config(pkg_id):
+    pkg = get_pkg_config(pkg_id)
+    pkgc["id"] = random.randint(pow(10, 9), pow(10, 10) - 1)
+    return write_pkg_config(pkgc)
+def default_pkg_config(name, ideas = None, ideas_files = None):
+    pkgc = {
+        "name": name,
+        "output_dir": "tmp",
+        "overwrite": True,
+        "max_failures": 50,
+        "ideas": ideas,
+        "oai_config_gen": {
+            "model": "text-davinci-003",
+            "max_tokens": 1024,
+            "temperature": 0.5,
+            "top_p": 1,
+            "frequency_penalty": 1,
+            "presence_penalty": 1
+        },
+        "queries": [
+            {
+                "prompt": "Rewrite this title to be more viral and interesting: $i",
+                "out_header": "Rewritten Title",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write an outline for the following title: $0",
+                "out_header": "Article Outline",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Generate the top 6 keywords for the following article: $1",
+                "out_header": "Keywords",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Generate the top 6 hashtags for the following article: $1",
+                "out_header": "Hashtags",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Generate the top 6 wordpress tags for the following article: $1",
+                "out_header": "Wordpress Tags",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a 160 character wordpress meta-description for the following article: $1",
+                "out_header": "Wordpress Meta Description",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write an Instagram post promoting the following article: $1",
+                "out_header": "Instagram Post",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a Twitter tweet promoting the following article: $1",
+                "out_header": "Twitter Tweet",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a Facebook post promoting the following article: $1",
+                "out_header": "Facebook Post",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a Youtube video description promoting the following article: $1",
+                "out_header": "Youtube Video Description",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a short Youtube subscribe now and click the notification bell call to action for the following article: $1",
+                "out_header": "Youtube Video CTA",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a website and sign up on the website for more information call to action promoting the following article: $1",
+                "out_header": "Website CTA",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a 180 to 220 word Youtube Shorts Script for the following article: $1",
+                "out_header": "Youtube Shorts Script",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write a 10 to 15 word Youtube Shorts subscribe now and notification bell call to action for the following article: $1",
+                "out_header": "Youtube Shorts CTA",
+                "oai_config": {}
+            },
+            {
+                "prompt": "Write an introduction for the following article: $1",
+                "out_header": "Introduction",
+                "oai_config": {}
+            }
+        ]
+    }
+
+    create_pkg_config(pkgc, ideas_files)
+
+
 
 """
 Returns open file if found. Raises exception if not found.

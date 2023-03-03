@@ -25,7 +25,8 @@ class oaiw_state():
     stat_working = 1 # if there is an actively operated-on idea
     stat_success = 2
     stat_failure = 3 # pkg failed
-    stat_no_idea = 4 # pkg loaded, but no idea present
+    stat_paused = 4
+#    stat_no_idea = 4 # pkg loaded, but no idea present
 
     def to_json(self):
         def ser(obj):
@@ -44,6 +45,10 @@ class oaiw_state():
                 self.pkg = None
                 self.run_id = random.randint(pow(10, 9), pow(10, 10) - 1)
                 return
+            elif hasattr(self, "status"):
+                if self.status == stat_paused:
+                    self.status = oaiw_state.stat_working
+                    return
 
             self.status = oaiw_state.stat_working
             self.run_id = random.randint(pow(10, 9), pow(10, 10) - 1)
@@ -51,6 +56,7 @@ class oaiw_state():
             self.pkg = pkg
             self.err = None
             self.ex = None # Temporary exception object
+            self.errc = 0 # Error count
             """
             status for given idea. form: 
             {
@@ -180,6 +186,8 @@ def fin_idea_stat(idea_stat, status, err = None):
 
     new_idea_stat = dict(idea_stat)
 
+    pers.dump_pkg_hdl_state(pkg_hdl_state) # For now, dump after every idea
+
     if status == "failure":
         new_idea_stat["status"] = "failure"
         if "path" in new_idea_stat:
@@ -190,7 +198,6 @@ def fin_idea_stat(idea_stat, status, err = None):
         tag_prot.idea_failure(new_idea_stat["idea"], err)
     elif status == "success":
         new_idea_stat["status"] = "success"
-        tag_prot.idea_success(new_idea_stat["idea"])
 
         ipath = pkg_hdl_state.pkg["output_dir"] + f"/{new_idea_stat['idea']}"
 
@@ -202,6 +209,7 @@ def fin_idea_stat(idea_stat, status, err = None):
         pers.write_idea_stat(pkg_hdl_state.pkg["queries"], 
                              new_idea_stat["query_data"], 
                              ipath + "/oai_output.txt")
+        tag_prot.idea_success(new_idea_stat["idea"])
     else:
         raise Exception("...what...")
 
@@ -290,13 +298,14 @@ Retrieve + format src_idx in prep for target query
 2. Look up dest_idx in the pkg query list and apply inp_cb_map
 """
 def query_data_get_idx(dest_q, src_idx, query_data):
-    util.taglog(f"gathering input from query {src_idx} for target {dest_idx}")
+    util.taglog(f"gathering input from query {src_idx} for target {dest_q}")
 
     out = query_data[src_idx] 
 
-    for cb in dest_q["inp_cb_map"]:
-        if cb.idx == src_idx:
-            out = proc.exec_proc(cb.cb_name, out)
+    if "inp_cb_map" in dest_q:
+        for cb in dest_q["inp_cb_map"]:
+            if cb.idx == src_idx:
+                out = proc.exec_proc(cb.cb_name, out)
 
     return out
 
@@ -339,7 +348,7 @@ async def exec_query(query, idea_stat):
 
     for param in pkg_hdl_state.pkg["oai_config_gen"]:
         if param not in oai_config:
-            oai_config["param"] = pkg_hdl_state.pkg["oai_config_gen"]["param"]
+            oai_config[param] = pkg_hdl_state.pkg["oai_config_gen"][param]
 
     oai_out = await openai.Completion.acreate(**oai_config)
     oai_out = oai_out.choices[0].text
@@ -369,6 +378,7 @@ async def handle_pkg(pkg):
     # TODO: convert to simply a one-time __new__() call with __init__() calls
     # as needed
     pkg_hdl_state = oaiw_state(pkg)
+    tag_prot.pkg_start(pkg_hdl_state)
     if not openai.api_key:
         pkg_hdl_state.status = oaiw_state.stat_failure
         raise PkgFatalException("openai api key not provided (use 'set_key' call)")
@@ -378,6 +388,9 @@ async def handle_pkg(pkg):
 
     while pkg_hdl_state.icur < len(pkg["ideas"]):
         try:
+            if pkg_hdl_state.errc > pkg_hdl_state.pkg["max_failures"]:
+                raise PkgFatalException("max_failures exceeded")
+            pers.dump_pkg_hdl_state(pkg_hdl_state) 
             idea = pkg_hdl_state.pkg["ideas"][pkg_hdl_state.icur]
             idea_stat = get_idea_stat(idea)
             if idea_stat["status"] == "queued":
@@ -402,6 +415,7 @@ async def handle_pkg(pkg):
             raise
         except PkgFatalException:
             pkg_hdl_state.status = oaiw_state.stat_failure
+            pkg_hdl_state.error = repr(PkgFatalException)
             raise
         except Exception as e:
             if idea_stat:
@@ -411,5 +425,16 @@ async def handle_pkg(pkg):
         
     pkg_hdl_state.status = oaiw_state.stat_success
 
+def unfreeze_pkg_state():
+    pass
+    # For future: reset errc
+    # also eventually use setattr to reconstruct the class
+    # also make sure a package cannot get dumped if it is in stat_idle...
+
+"""
+Call to schedule a package for handling
+"""
 def schedule_pkg(pkg):
     pkgq.put_nowait(pkg)
+def pause():
+    pkg_hdl_state.status = oaiw_state.stat_paused
